@@ -1,27 +1,90 @@
-"""User endpoints."""
+"""User endpoints with Redis caching."""
 
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_session
-from app.dao.base import get_dao
+from app.dao.user import get_user_dao
 from app.models.user import User
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+class UserCreate(BaseModel):
+    """User creation model."""
+    username: str
+    email: str
+    full_name: str
+
+
+class UserUpdate(BaseModel):
+    """User update model."""
+    username: Optional[str] = None
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+
+
 @router.get("/", response_model=List[dict])
 async def get_users(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Number of users to skip"),
+    limit: int = Query(100, ge=1, le=100, description="Number of users to return"),
     session: AsyncSession = Depends(get_async_session)
 ):
-    """Get all users."""
-    dao = get_dao(User, session)
-    users = await dao.get_all(skip=skip, limit=limit)
+    """Get all users with caching."""
+    dao = get_user_dao(session)
+    users = await dao.get_all_cached(skip=skip, limit=limit)
     return [user.to_dict() for user in users]
+
+
+@router.get("/count", response_model=dict)
+async def get_user_count(
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get total user count with caching."""
+    dao = get_user_dao(session)
+    count = await dao.get_user_count()
+    return {"count": count}
+
+
+@router.get("/search", response_model=List[dict])
+async def search_users(
+    q: str = Query(..., min_length=1, description="Search query"),
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of results"),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Search users by username or full name."""
+    dao = get_user_dao(session)
+    users = await dao.search_users(q, limit)
+    return [user.to_dict() for user in users]
+
+
+@router.get("/by-username/{username}", response_model=dict)
+async def get_user_by_username(
+    username: str,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get user by username with caching."""
+    dao = get_user_dao(session)
+    user = await dao.get_by_username(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.to_dict()
+
+
+@router.get("/by-email/{email}", response_model=dict)
+async def get_user_by_email(
+    email: str,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Get user by email with caching."""
+    dao = get_user_dao(session)
+    user = await dao.get_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.to_dict()
 
 
 @router.get("/{user_id}", response_model=dict)
@@ -29,9 +92,9 @@ async def get_user(
     user_id: int,
     session: AsyncSession = Depends(get_async_session)
 ):
-    """Get user by ID."""
-    dao = get_dao(User, session)
-    user = await dao.get_by_id(user_id)
+    """Get user by ID with caching."""
+    dao = get_user_dao(session)
+    user = await dao.get_by_id_cached(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user.to_dict()
@@ -39,16 +102,81 @@ async def get_user(
 
 @router.post("/", response_model=dict)
 async def create_user(
-    username: str,
-    email: str,
-    full_name: str,
+    user_data: UserCreate,
     session: AsyncSession = Depends(get_async_session)
 ):
-    """Create a new user."""
-    dao = get_dao(User, session)
+    """Create a new user with cache invalidation."""
+    dao = get_user_dao(session)
+    
+    # Check if username already exists
+    existing_user = await dao.get_by_username(user_data.username)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # Check if email already exists
+    existing_user = await dao.get_by_email(user_data.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    
     user = await dao.create(
-        username=username,
-        email=email,
-        full_name=full_name
+        username=user_data.username,
+        email=user_data.email,
+        full_name=user_data.full_name
     )
     return user.to_dict()
+
+
+@router.put("/{user_id}", response_model=dict)
+async def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Update user with cache invalidation."""
+    dao = get_user_dao(session)
+    
+    # Check if user exists
+    existing_user = await dao.get_by_id(user_id)
+    if not existing_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check for duplicate username if provided
+    if user_data.username and user_data.username != existing_user.username:
+        username_user = await dao.get_by_username(user_data.username)
+        if username_user:
+            raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # Check for duplicate email if provided
+    if user_data.email and user_data.email != existing_user.email:
+        email_user = await dao.get_by_email(user_data.email)
+        if email_user:
+            raise HTTPException(status_code=400, detail="Email already exists")
+    
+    # Update user
+    update_data = user_data.model_dump(exclude_unset=True)
+    updated_user = await dao.update(user_id, **update_data)
+    
+    if not updated_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return updated_user.to_dict()
+
+
+@router.delete("/{user_id}")
+async def delete_user(
+    user_id: int,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Delete user with cache invalidation."""
+    dao = get_user_dao(session)
+    
+    # Check if user exists
+    existing_user = await dao.get_by_id(user_id)
+    if not existing_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    deleted = await dao.delete(user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"message": "User deleted successfully"}
