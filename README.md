@@ -97,6 +97,8 @@ app/
 - **GET** `/api/v1/health` - Health check
 - **GET** `/api/v1/users` - List users
 - **GET** `/api/v1/users/{id}` - Get user by ID
+- **GET** `/api/v1/users/by-username/{username}` - Get user by username
+- **GET** `/api/v1/users/by-email/{email}` - Get user by email
 - **POST** `/api/v1/users` - Create user
 - **GET** `/docs` - API documentation (Swagger UI)
 - **GET** `/admin` - Admin interface
@@ -132,6 +134,7 @@ admin.add_view(ProductAdmin)
 
 ### Using the DAO Pattern
 
+#### Generic DAO
 ```python
 from app.dao.base import get_dao
 from app.models.user import User
@@ -142,16 +145,41 @@ async def get_user_service(user_id: int, session: AsyncSession):
     return await dao.get_by_id(user_id)
 ```
 
-### Using Cache
+#### Model-specific DAO with Special Methods
+```python
+from app.dao.user import UserDAO
+
+# In your endpoint or service  
+async def get_user_by_username_service(username: str, session: AsyncSession):
+    dao = UserDAO(session)
+    return await dao.get_by_username(username)
+
+# Other special methods available:
+# dao.get_by_email(email)
+# dao.search_by_name(pattern) 
+# dao.get_users_by_domain(domain)
+# dao.username_exists(username)
+# dao.email_exists(email)
+```
+
+### Using Cache with Endpoints
+
+The user endpoints now include Redis caching with cache-first strategy:
 
 ```python
 from app.core.cache import cache_manager
+from app.core.cache_keys import get_user_cache_key
+
+# Cache is automatically handled in endpoints, but you can use it manually:
 
 # Set cache
 await cache_manager.set("key", {"data": "value"}, expire=3600)
 
 # Get cache
 data = await cache_manager.get("key")
+
+# Cache keys for users
+user_key = get_user_cache_key(123)  # "user:123"
 ```
 
 ## Configuration

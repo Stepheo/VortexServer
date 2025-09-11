@@ -79,5 +79,40 @@ def test_dao_pattern():
     assert dao.session == mock_session
 
 
+def test_user_dao():
+    """Test UserDAO specific functionality."""
+    from unittest.mock import Mock
+    from app.dao.user import UserDAO
+    
+    # Create a mock session
+    mock_session = Mock()
+    
+    # Test UserDAO creation
+    user_dao = UserDAO(mock_session)
+    assert user_dao.session == mock_session
+    
+    # Test that it has the specialized methods
+    assert hasattr(user_dao, 'get_by_username')
+    assert hasattr(user_dao, 'get_by_email')
+    assert hasattr(user_dao, 'username_exists')
+    assert hasattr(user_dao, 'email_exists')
+
+
+def test_cache_keys():
+    """Test cache key generation."""
+    from app.core.cache_keys import (
+        get_user_cache_key,
+        get_users_list_cache_key,
+        get_user_by_username_cache_key,
+        get_user_by_email_cache_key,
+    )
+    
+    # Test cache key generation
+    assert get_user_cache_key(123) == "user:123"
+    assert get_users_list_cache_key(0, 100) == "users:list:skip=0:limit=100"
+    assert get_user_by_username_cache_key("testuser") == "user:username:testuser"
+    assert get_user_by_email_cache_key("test@example.com") == "user:email:test@example.com"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
