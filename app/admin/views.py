@@ -1,0 +1,31 @@
+"""SQLAdmin views and configuration."""
+
+from sqladmin import Admin, ModelView
+from starlette.applications import Starlette
+
+from app.config.settings import settings
+from app.core.database import engine
+from app.models.user import User
+
+
+class UserAdmin(ModelView, model=User):
+    """User admin view."""
+    
+    column_list = [User.id, User.username, User.email, User.full_name, User.created_at]
+    column_searchable_list = [User.username, User.email, User.full_name]
+    column_sortable_list = [User.id, User.username, User.email, User.created_at]
+
+
+def create_admin(app: Starlette) -> Admin:
+    """Create and configure SQLAdmin instance."""
+    admin = Admin(
+        app=app,
+        engine=engine,
+        title="VortexServer Admin",
+        base_url=settings.admin_prefix,
+    )
+    
+    # Add model views
+    admin.add_view(UserAdmin)
+    
+    return admin
