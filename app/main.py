@@ -1,5 +1,6 @@
 """Main FastAPI application."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -61,6 +62,31 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     
+    # Security headers middleware (simple)
+    @app.middleware("http")
+    async def security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("X-XSS-Protection", "0")  # modern browsers rely on CSP
+        # Minimal CSP (adjust as needed)
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self' https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https://fastapi.tiangolo.com; "
+            "font-src 'self' data: https://cdn.jsdelivr.net; "
+            "object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+        )
+        # HSTS only enable in production with HTTPS
+        if not settings.debug:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+        return response
+    
     # Add API routes
     app.include_router(api_router)
     
@@ -90,7 +116,7 @@ if __name__ == "__main__":
     import uvicorn
     
     uvicorn.run(
-        "app.main:app",
+        "main:app",
         host=settings.host,
         port=settings.port,
         reload=settings.reload,

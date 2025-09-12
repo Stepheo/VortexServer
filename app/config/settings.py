@@ -14,6 +14,12 @@ class Settings(BaseSettings):
         extra="ignore"
     )
     
+    # Bot settings
+    bot_token: str = Field(
+        default="your-bot-token-here",
+        description="Telegram bot token"
+    )
+    
     # Database settings
     database_url: str = Field(
         default="postgresql+asyncpg://user:password@localhost:5432/vortex_db",
@@ -48,6 +54,29 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", description="Server host")
     port: int = Field(default=8000, description="Server port")
     reload: bool = Field(default=False, description="Auto-reload on code changes")
+    # Token / cookie settings
+    access_token_expire_minutes: int = Field(
+        default=60 * 24,
+        description="Access token lifetime in minutes"
+    )
+    token_cookie_name: str = Field(
+        default="access_token",
+        description="Name of the cookie to store the access token"
+    )
+    token_cookie_secure: bool = Field(
+        default=False,
+        description="Set cookie Secure flag (only sent over HTTPS)"
+    )
+    token_cookie_httponly: bool = Field(
+        default=True,
+        description="Set cookie HttpOnly flag (not accessible via JS)"
+    )
+    token_cookie_samesite: str = Field(
+        default="lax",
+        description="SameSite attribute for cookie (lax/strict/none)"
+    )
+
+
 
 
 # Global settings instance
