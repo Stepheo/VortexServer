@@ -2,6 +2,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
 from app.core.database import get_async_session
 from app.dao.gift import get_gift_dao, GiftDAO
@@ -66,11 +67,25 @@ async def list_gifts(
     return [g.to_dict() for g in gifts]
 
 
+class GiftUpdate(BaseModel):
+    name: Optional[str] = None
+    real_rarity: Optional[float] = None
+    visual_rarity: Optional[float] = None
+    rarity_color: Optional[str] = None
+
 @router.patch("/{gift_id}")
-async def update_gift(gift_id: int, dao: GiftDAO = Depends(get_dao), **payload):
-    if not payload:
-        return await dao.get_by_id(gift_id)
-    gift = await dao.update(gift_id, **payload)
+async def update_gift(
+    gift_id: int,
+    payload: GiftUpdate,
+    dao: GiftDAO = Depends(get_dao)
+):
+    update_data = payload.dict(exclude_unset=True)
+    if not update_data:
+        gift = await dao.get_by_id(gift_id)
+        if not gift:
+            raise HTTPException(status_code=404, detail="Gift not found")
+        return gift.to_dict()
+    gift = await dao.update(gift_id, **update_data)
     if not gift:
         raise HTTPException(status_code=404, detail="Gift not found")
     return gift.to_dict()

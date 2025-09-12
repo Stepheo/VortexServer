@@ -25,7 +25,7 @@ class InventoryItemDAO(BaseDAO[InventoryItem]):
         cache_key = self._cache_key_item(inventory_id, gift_id)
         cached = await cache_manager.get(cache_key)
         if cached:
-            return InventoryItem(**cached)
+            return cached  # Return the cached dictionary directly, or use a Pydantic schema if available
         result = await self.session.execute(
             select(InventoryItem).where(
                 InventoryItem.inventory_id == inventory_id,
@@ -56,7 +56,7 @@ class InventoryItemDAO(BaseDAO[InventoryItem]):
             new_qty = item.quantity + delta
             if new_qty <= 0:
                 await self.remove(inventory_id, gift_id)
-                raise ValueError("Quantity became non-positive; item removed")
+                return None
             await self.session.execute(
                 update(InventoryItem)
                 .where(InventoryItem.id == item.id)

@@ -123,11 +123,10 @@ async def auth_telegram(init: InitDataModel, request: Request, response: Respons
     data = verify_telegram_init_data(init.init_data, bot_token)
 
     # Replay protection (use provided signature+auth_date)
-    parsed = parse_init_data(init.init_data)
     await check_replay(
-        user_id=parsed.get('user_id') or parsed.get('id') or parsed.get('user',''),
-        auth_date=parsed.get('auth_date',''),
-        signature=parsed.get('hash','')
+        user_id=data.get('user_id') or data.get('id') or data.get('user', ''),
+        auth_date=data.get('auth_date', ''),
+        signature=init.init_data.split('\n')[-1].split('=')[1] if 'hash=' in init.init_data else ''
     )
 
     # Create JWT payload (include minimal claims)

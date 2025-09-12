@@ -70,7 +70,11 @@ def test_inventory_flow():
             "visual_rarity": 0.4,
             "rarity_color": "#000"
         })
-        assert resp.status_code in (200, 201, 400)  # 400 if already created by previous test run
+        if resp.status_code == 400:
+            # Ensure the error is due to the gift already existing
+            assert "already exists" in resp.text.lower()
+        else:
+            assert resp.status_code in (200, 201)
 
         # Get gift id (fetch by name if already exists)
         if resp.status_code == 201:

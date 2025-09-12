@@ -26,9 +26,8 @@ def make_init_data(user_id="12345", username="testuser", bot_token=None, auth_da
     data["hash"] = hash_val
     return "\n".join(f"{k}={v}" for k, v in data.items())
 
-client = TestClient(app)
-
 def test_auth_telegram_success():
+    client = TestClient(app)
     init_data = make_init_data()
     resp = client.post("/api/v1/auth/telegram", json={"init_data": init_data})
     assert resp.status_code == 200
@@ -36,17 +35,20 @@ def test_auth_telegram_success():
     assert resp.json()["message"] == "authenticated"
 
 def test_auth_telegram_bad_signature():
+    client = TestClient(app)
     init_data = make_init_data(bad_hash=True)
     resp = client.post("/api/v1/auth/telegram", json={"init_data": init_data})
     assert resp.status_code == 401
 
 def test_auth_telegram_expired():
+    client = TestClient(app)
     init_data = make_init_data(expired=True)
     resp = client.post("/api/v1/auth/telegram", json={"init_data": init_data})
     assert resp.status_code == 401
     assert "expired" in resp.json()["detail"]
 
 def test_auth_telegram_cookie_flags():
+    client = TestClient(app)
     init_data = make_init_data()
     resp = client.post("/api/v1/auth/telegram", json={"init_data": init_data})
     cookie = resp.cookies.get(settings.token_cookie_name)

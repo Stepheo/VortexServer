@@ -26,17 +26,7 @@ class InventoryDAO(BaseDAO[Inventory]):
         # Ensure user row exists (tests create token but no DB user). Minimal placeholder user.
         existing_user = await self.session.get(User, user_id)
         if not existing_user:
-            # Create a lightweight user record to satisfy FK. Use deterministic data.
-            placeholder = User(id=user_id, username=f"user{user_id}", email=f"user{user_id}@example.com", full_name=f"User {user_id}")
-            self.session.add(placeholder)
-            try:
-                await self.session.flush()
-            except Exception:
-                await self.session.rollback()
-                # Re-check if created concurrently
-                existing_user = await self.session.get(User, user_id)
-                if not existing_user:
-                    raise
+            raise ValueError(f"User with id {user_id} does not exist.")
         inv = await self.get_by_user_id(user_id)
         if inv:
             return inv

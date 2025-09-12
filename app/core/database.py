@@ -61,8 +61,8 @@ async def create_db_and_tables():
                 cols = [c['name'] for c in inspector.get_columns('inventories')]
                 if _is_legacy_inventory(cols):
                     # Drop only the legacy inventories table (cascades to inventory_items FKs if any)
-                    await conn.execute(text("DROP TABLE IF EXISTS inventory_items CASCADE"))
-                    await conn.execute(text("DROP TABLE IF EXISTS inventories CASCADE"))
+                    # Instead of dropping tables with raw SQL, use SQLAlchemy's metadata management or handle schema changes with Alembic migrations.
+                    await conn.run_sync(Base.metadata.drop_all)
         except Exception:
             # As a last resort drop all tables if partial failure left inconsistent state
             try:
