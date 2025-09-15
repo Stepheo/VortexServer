@@ -1,17 +1,23 @@
 """Main FastAPI application."""
 
+from app.config.settings import bot, dp
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from aiogram.types import Update
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.admin.views import create_admin
 from app.api.v1.router import api_router
 from app.config.settings import settings
 from app.core.cache import cache_manager
-from app.core.database import close_db_connection, create_db_and_tables
+from app.core.database import close_db_connection, engine
+from app.models.base import Base
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.log_level.upper()))
@@ -24,18 +30,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("Starting VortexServer...")
     
-    # Initialize database
-    logger.info("Initializing database...")
-    await create_db_and_tables()
-    
-    # Initialize cache
+    # Cache
     logger.info("Connecting to cache...")
     try:
         await cache_manager.connect()
         logger.info("Cache connected successfully")
     except Exception as e:
         logger.warning(f"Cache connection failed: {e}")
+        
+    await bot.set_webhook(
+        url=f"{settings.webhook_url}/webhook",
+        allowed_updates=dp.resolve_used_update_types(),
+        drop_pending_updates=True
+    )
     
+    # Auto-create tables in lightweight dev/test (SQLite) mode
+    if settings.database_url.startswith("sqlite"):
+        try:
+            # Ensure existing tables
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            # Run Alembic migrations programmatically to add new columns
+            from alembic import command
+            from alembic.config import Config
+            import pathlib
+            alembic_cfg = Config(str(pathlib.Path(__file__).parent.parent / 'alembic.ini'))
+            # SQLite URL for env
+            alembic_cfg.set_main_option('sqlalchemy.url', settings.database_url)
+            command.upgrade(alembic_cfg, 'head')
+            logger.info("SQLite migrations applied")
+        except Exception as e:
+            logger.warning(f"Failed to run SQLite migrations: {e}")
+
     logger.info("VortexServer started successfully")
     
     yield
@@ -60,6 +86,14 @@ def create_app() -> FastAPI:
         version="0.1.0",
         debug=settings.debug,
         lifespan=lifespan,
+    )
+    # CORS middleware for local frontend
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     
     # Security headers middleware (simple)
@@ -91,7 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
     
     # Add admin interface
-    admin = create_admin(app)
+    create_admin(app)
     
     # Add root endpoint
     @app.get("/")
@@ -104,6 +138,12 @@ def create_app() -> FastAPI:
             "admin": settings.admin_prefix,
             "api": settings.api_v1_prefix,
         }
+        
+        
+    @app.post("/webhook")
+    async def webhook(request: Request) -> None:
+        update = Update.model_validate(await request.json(), context={"bot": bot})
+        await dp.feed_update(bot, update)
     
     return app
 

@@ -1,4 +1,7 @@
-"""Gift endpoints."""
+"""(Deprecated) Gift endpoints removed from public API.
+
+File kept temporarily for reference. Router not included in main API router.
+"""
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +10,7 @@ from pydantic import BaseModel
 from app.core.database import get_async_session
 from app.dao.gift import get_gift_dao, GiftDAO
 
-router = APIRouter(prefix="/gifts", tags=["gifts"])
+router = APIRouter(prefix="/gifts", tags=["gifts"], include_in_schema=False)
 
 
 async def get_dao(session: AsyncSession = Depends(get_async_session)) -> GiftDAO:
@@ -20,6 +23,7 @@ async def create_gift(
     real_rarity: float,
     visual_rarity: float,
     rarity_color: str,
+    price: float = Query(0, ge=0),
     dao: GiftDAO = Depends(get_dao)
 ):
     existing = await dao.get_by_name(name)
@@ -30,8 +34,12 @@ async def create_gift(
         real_rarity=real_rarity,
         visual_rarity=visual_rarity,
         rarity_color=rarity_color,
+        price=price,
     )
-    return gift.to_dict()
+    data = gift.to_dict()
+    data.pop('real_rarity', None)
+    data.pop('visual_rarity', None)
+    return data
 
 
 @router.get("/{gift_id}")
@@ -39,7 +47,10 @@ async def get_gift(gift_id: int, dao: GiftDAO = Depends(get_dao)):
     gift = await dao.get_by_id(gift_id)
     if not gift:
         raise HTTPException(status_code=404, detail="Gift not found")
-    return gift.to_dict()
+    data = gift.to_dict()
+    data.pop('real_rarity', None)
+    data.pop('visual_rarity', None)
+    return data
 
 
 @router.get("/by-name/{name}")
@@ -47,7 +58,10 @@ async def get_gift_by_name(name: str, dao: GiftDAO = Depends(get_dao)):
     gift = await dao.get_by_name(name)
     if not gift:
         raise HTTPException(status_code=404, detail="Gift not found")
-    return gift.to_dict()
+    data = gift.to_dict()
+    data.pop('real_rarity', None)
+    data.pop('visual_rarity', None)
+    return data
 
 
 @router.get("/", response_model=List[dict])
@@ -64,7 +78,13 @@ async def list_gifts(
         gifts = await dao.list_by_rarity_range(min_real=min_real, max_real=max_real, skip=skip, limit=limit)
     else:
         gifts = await dao.get_all(skip=skip, limit=limit)
-    return [g.to_dict() for g in gifts]
+    result = []
+    for g in gifts:
+        d = g.to_dict()
+        d.pop('real_rarity', None)
+        d.pop('visual_rarity', None)
+        result.append(d)
+    return result
 
 
 class GiftUpdate(BaseModel):
@@ -72,6 +92,7 @@ class GiftUpdate(BaseModel):
     real_rarity: Optional[float] = None
     visual_rarity: Optional[float] = None
     rarity_color: Optional[str] = None
+    price: Optional[float] = None
 
 @router.patch("/{gift_id}")
 async def update_gift(
@@ -80,15 +101,24 @@ async def update_gift(
     dao: GiftDAO = Depends(get_dao)
 ):
     update_data = payload.dict(exclude_unset=True)
+    # Validation
+    if 'price' in update_data and update_data['price'] is not None and update_data['price'] < 0:
+        raise HTTPException(status_code=400, detail="price must be >= 0")
     if not update_data:
         gift = await dao.get_by_id(gift_id)
         if not gift:
             raise HTTPException(status_code=404, detail="Gift not found")
-        return gift.to_dict()
+        d = gift.to_dict()
+        d.pop('real_rarity', None)
+        d.pop('visual_rarity', None)
+        return d
     gift = await dao.update(gift_id, **update_data)
     if not gift:
         raise HTTPException(status_code=404, detail="Gift not found")
-    return gift.to_dict()
+    d = gift.to_dict()
+    d.pop('real_rarity', None)
+    d.pop('visual_rarity', None)
+    return d
 
 
 @router.delete("/{gift_id}", status_code=status.HTTP_204_NO_CONTENT)

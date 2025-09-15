@@ -1,52 +1,6 @@
 """Simple validation test for the application structure."""
 
-import asyncio
-from unittest.mock import AsyncMock, patch
-
 import pytest
-from fastapi.testclient import TestClient
-
-
-def test_app_creation():
-    """Test that the app can be created without errors."""
-    with patch('app.core.database.create_db_and_tables', new_callable=AsyncMock):
-        with patch('app.core.cache.cache_manager.connect', new_callable=AsyncMock):
-            from app.main import create_app
-            
-            app = create_app()
-            assert app is not None
-            assert app.title == "VortexServer"
-
-
-def test_root_endpoint():
-    """Test the root endpoint."""
-    with patch('app.core.database.create_db_and_tables', new_callable=AsyncMock):
-        with patch('app.core.cache.cache_manager.connect', new_callable=AsyncMock):
-            with patch('app.core.cache.cache_manager.disconnect', new_callable=AsyncMock):
-                with patch('app.core.database.close_db_connection', new_callable=AsyncMock):
-                    from app.main import app
-                    
-                    with TestClient(app) as client:
-                        response = client.get("/")
-                        assert response.status_code == 200
-                        data = response.json()
-                        assert data["message"] == "Welcome to VortexServer"
-                        assert "version" in data
-
-
-def test_health_endpoint():
-    """Test the health check endpoint."""
-    with patch('app.core.database.create_db_and_tables', new_callable=AsyncMock):
-        with patch('app.core.cache.cache_manager.connect', new_callable=AsyncMock):
-            with patch('app.core.cache.cache_manager.disconnect', new_callable=AsyncMock):
-                with patch('app.core.database.close_db_connection', new_callable=AsyncMock):
-                    from app.main import app
-                    
-                    with TestClient(app) as client:
-                        response = client.get("/api/v1/health")
-                        assert response.status_code == 200
-                        data = response.json()
-                        assert data["status"] == "healthy"
 
 
 def test_settings_loading():

@@ -1,4 +1,7 @@
-"""User endpoints with Redis caching."""
+"""(Deprecated) User endpoints removed from public API.
+
+Router kept for internal reference; not included in main router.
+"""
 
 from typing import List, Optional
 
@@ -10,21 +13,22 @@ from app.core.database import get_async_session
 from app.dao.user import get_user_dao
 from app.models.user import User
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["users"], include_in_schema=False)
 
 
 class UserCreate(BaseModel):
     """User creation model."""
+    tg_id: int
     username: str
-    email: str
-    full_name: str
+    first_name: str
+    last_name: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
     """User update model."""
     username: Optional[str] = None
-    email: Optional[str] = None
-    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
 
 @router.get("/", response_model=List[dict])
@@ -55,7 +59,7 @@ async def search_users(
     limit: int = Query(10, ge=1, le=50, description="Maximum number of results"),
     session: AsyncSession = Depends(get_async_session)
 ):
-    """Search users by username or full name."""
+    """Search users by username or first name."""
     dao = get_user_dao(session)
     users = await dao.search_users(q, limit)
     return [user.to_dict() for user in users]
@@ -69,19 +73,6 @@ async def get_user_by_username(
     """Get user by username with caching."""
     dao = get_user_dao(session)
     user = await dao.get_by_username(username)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user.to_dict()
-
-
-@router.get("/by-email/{email}", response_model=dict)
-async def get_user_by_email(
-    email: str,
-    session: AsyncSession = Depends(get_async_session)
-):
-    """Get user by email with caching."""
-    dao = get_user_dao(session)
-    user = await dao.get_by_email(email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user.to_dict()
@@ -113,15 +104,8 @@ async def create_user(
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
     
-    # Check if email already exists
-    existing_user = await dao.get_by_email(user_data.email)
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already exists")
-    
     user = await dao.create(
-        username=user_data.username,
-        email=user_data.email,
-        full_name=user_data.full_name
+        **user_data.model_dump()
     )
     return user.to_dict()
 
@@ -145,12 +129,6 @@ async def update_user(
         username_user = await dao.get_by_username(user_data.username)
         if username_user:
             raise HTTPException(status_code=400, detail="Username already exists")
-    
-    # Check for duplicate email if provided
-    if user_data.email and user_data.email != existing_user.email:
-        email_user = await dao.get_by_email(user_data.email)
-        if email_user:
-            raise HTTPException(status_code=400, detail="Email already exists")
     
     # Update user
     update_data = user_data.model_dump(exclude_unset=True)

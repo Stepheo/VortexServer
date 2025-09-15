@@ -13,8 +13,8 @@ class User(BaseModel):
 
     tg_id: Mapped[int] = mapped_column(unique=True, index=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    email: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    full_name: Mapped[str] = mapped_column(String(100))
+    first_name: Mapped[str] = mapped_column(String(50))
+    last_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     inventory = relationship(
         "Inventory",
@@ -22,6 +22,13 @@ class User(BaseModel):
         cascade="all, delete-orphan",
         lazy="joined",
         uselist=False
+    )
+
+    transactions = relationship(
+        "Transaction",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
     )
 
     def __repr__(self) -> str:  # pragma: no cover

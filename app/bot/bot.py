@@ -1,15 +1,13 @@
-import asyncio
-import logging
-import sys
-from os import getenv
-
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
+from app.core.database import get_async_session
+from app.dao import get_user_dao
 from app.config import settings
+from app.api.v1.endpoints.users import UserCreate
 
 # Bot token can be obtained via https://t.me/BotFather
 TOKEN = settings.bot_token
@@ -30,6 +28,12 @@ async def command_start_handler(message: Message) -> None:
     # method automatically or call API method directly via
     # Bot instance: `bot.send_message(chat_id=message.chat.id, ...)`
     await message.answer(f"Hello, {html.bold(message.from_user.full_name)}!")
+    async with get_async_session() as session:
+        user_dao = get_user_dao(session=session)
+        # Создаем пользователя с Telegram ID
+        await user_dao.create(**UserCreate(tg_id=message.from_user.id, username=message.from_user.username or "",
+                                        first_name=message.from_user.first_name or "",
+                                        last_name=message.from_user.last_name or "").model_dump())
     
 
 

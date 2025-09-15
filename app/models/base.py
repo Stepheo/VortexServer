@@ -12,10 +12,14 @@ class Base(DeclarativeBase):
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert model instance to dictionary."""
-        return {
+        data = {
             column.name: getattr(self, column.name)
             for column in self.__table__.columns
         }
+        # Globally strip audit timestamps from API serialization
+        data.pop("created_at", None)
+        data.pop("updated_at", None)
+        return data
 
 
 class BaseModel(Base):

@@ -57,9 +57,9 @@ class UserDAO(BaseDAO[User]):
         
         return user
     
-    async def get_by_email(self, email: str) -> Optional[User]:
-        """Get user by email."""
-        cache_key = f"user:email:{email}"
+    async def get_by_tg_id(self, tg_id: int) -> Optional[User]:
+        """Get user by Telegram ID."""
+        cache_key = f"user:tg_id:{tg_id}"
         
         # Try cache first
         cached_user = await cache_manager.get(cache_key)
@@ -69,7 +69,7 @@ class UserDAO(BaseDAO[User]):
         
         # Get from database
         result = await self.session.execute(
-            select(User).where(User.email == email)
+            select(User).where(User.tg_id == tg_id)
         )
         user = result.scalar_one_or_none()
         
@@ -77,6 +77,22 @@ class UserDAO(BaseDAO[User]):
             # Cache for 5 minutes
             await cache_manager.set(cache_key, user.to_dict(), expire=300)
         
+        return user
+
+    async def get_by_email(self, email: str) -> Optional[User]:
+        """Get user by email (если поле email существует в модели)."""
+        # Кешируем по ключу email
+        cache_key = f"user:email:{email}"
+        cached_user = await cache_manager.get(cache_key)
+        if cached_user:
+            return User(**cached_user)
+        # Предполагаем наличие атрибута email
+        result = await self.session.execute(
+            select(User).where(getattr(User, 'email') == email)  # type: ignore[attr-defined]
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            await cache_manager.set(cache_key, user.to_dict(), expire=300)
         return user
     
     async def get_all_cached(
@@ -105,10 +121,10 @@ class UserDAO(BaseDAO[User]):
         return users
     
     async def search_users(self, query: str, limit: int = 10) -> List[User]:
-        """Search users by username or full name."""
+        """Search users by username or first name."""
         search_query = select(User).where(
             (User.username.ilike(f"%{query}%")) |
-            (User.full_name.ilike(f"%{query}%"))
+            (User.first_name.ilike(f"%{query}%"))
         ).limit(limit)
         
         result = await self.session.execute(search_query)
@@ -142,6 +158,22 @@ class UserDAO(BaseDAO[User]):
         
         return user
     
+    async def delete_by_tg_id(self, tg_id: int) -> bool:
+        """Delete user by Telegram ID and invalidate relevant caches."""
+        # Get user data before deletion for cache invalidation
+        user = await self.get_by_tg_id(tg_id)
+        
+        if not user:
+            return False
+        
+        deleted = await super().delete(user.id)
+        
+        if deleted and user:
+            await self._invalidate_user_caches(user)
+            await cache_manager.delete("users:count")
+        
+        return deleted
+    
     async def update(self, id: int, **kwargs) -> Optional[User]:
         """Update user and invalidate relevant caches."""
         # Get old user data for cache invalidation
@@ -174,7 +206,10 @@ class UserDAO(BaseDAO[User]):
         """Helper method to invalidate all caches related to a user."""
         await cache_manager.delete(f"user:{user.id}")
         await cache_manager.delete(f"user:username:{user.username}")
-        await cache_manager.delete(f"user:email:{user.email}")
+        await cache_manager.delete(f"user:tg_id:{user.tg_id}")
+        # Attempt delete email cache if attribute exists
+        if hasattr(user, 'email') and getattr(user, 'email'):
+            await cache_manager.delete(f"user:email:{getattr(user, 'email')}")
         
         # Invalidate list caches (we could be more sophisticated here)
         # For simplicity, we'll clear common list cache patterns

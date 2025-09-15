@@ -165,6 +165,37 @@ All configuration is managed through `app/config/settings.py` using pydantic-set
 - `SECRET_KEY`: Application secret key
 - `ADMIN_SECRET_KEY`: Admin interface secret key
 
+## Database Migrations (Alembic)
+
+Проект использует Alembic для управления схемой БД.
+
+### Инициализация (уже сделано)
+Структура находится в каталоге `alembic/`, конфиг — `alembic.ini`.
+
+### Создание новой ревизии
+```bash
+alembic revision --autogenerate -m "add something"
+```
+
+### Применение миграций
+```bash
+alembic upgrade head
+```
+
+### Откат на предыдущую ревизию
+```bash
+alembic downgrade -1
+```
+
+### Важно
+- Старый вызов `create_db_and_tables()` можно использовать ТОЛЬКО один раз при чистой БД. Для дальнейших изменений — только миграции.
+- При переходе с JSON-поля `cases.gifts` на связь many-to-many была добавлена ассоциативная таблица `case_gifts` и удалён столбец `gifts`.
+- Если у вас ещё есть столбец `cases.gifts` и он NOT NULL — выполните: `ALTER TABLE cases DROP COLUMN gifts;` или примените миграцию.
+
+### Troubleshooting
+- Если Alembic не видит модели — убедитесь, что они импортированы в `alembic/env.py`.
+- Для async URL SQLAlchemy: используйте обычный sync DSN в alembic.ini (без `+asyncpg`).
+
 ## Development
 
 ### Running Tests

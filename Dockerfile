@@ -23,8 +23,13 @@ RUN pip install --upgrade pip setuptools wheel \
 # Copy project
 COPY . /app
 
-# Expose uvicorn port
+# Copy entrypoint
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+ENV RUN_MIGRATIONS=1 \
+    WAIT_REDIS=1
+
 EXPOSE 8000
 
-# Default command: run uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
